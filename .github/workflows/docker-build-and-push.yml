@@ -33,6 +33,13 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/image-layout"
           tar -xf "$RUNNER_TEMP/wordpress-mcp-image.tar" -C "$RUNNER_TEMP/image-layout"
+      - name: Select images for scanning
+        run: |
+          for platform in linux/amd64 linux/arm64; do
+            arch="${platform#*/}"
+            python3 .github/scripts/select-oci-platform.py \
+              "$RUNNER_TEMP/image-layout" "$platform" "$RUNNER_TEMP/image-${arch}"
+          done
       - name: Install Trivy
         uses: aquasecurity/setup-trivy@3fb12ec12f41e471780db15c232d5dd185dcb514 # v0.2.6
         with:
@@ -41,7 +48,7 @@ jobs:
         run: |
           for platform in linux/amd64 linux/arm64; do
             arch="${platform#*/}"
-            trivy image --input "$RUNNER_TEMP/image-layout" --platform "$platform" \
+            trivy image --input "$RUNNER_TEMP/image-${arch}" \
               --skip-dirs '**/venv' --format sarif --output "trivy-results-${arch}.sarif"
           done
       - name: Upload amd64 SARIF file
@@ -57,7 +64,8 @@ jobs:
       - name: Enforce vulnerability policy
         run: |
           for platform in linux/amd64 linux/arm64; do
-            trivy image --input "$RUNNER_TEMP/image-layout" --platform "$platform" \
+            arch="${platform#*/}"
+            trivy image --input "$RUNNER_TEMP/image-${arch}" \
               --skip-dirs '**/venv' --format table --severity HIGH,CRITICAL --exit-code 1
           done
       - name: Log in to GitHub Container Registry
@@ -73,7 +81,7 @@ jobs:
         env:
           IMAGE_TAG: ghcr.io/${{ github.repository }}:${{ github.ref_name }}
         run: |
-          crane push "$RUNNER_TEMP/image-layout" "$IMAGE_TAG"
+          crane push --index "$RUNNER_TEMP/image-layout" "$IMAGE_TAG"
           echo "digest=$(crane digest "$IMAGE_TAG")" >> "$GITHUB_OUTPUT"
       - name: Install Cosign
         uses: sigstore/cosign-installer@v3.8.1
