@@ -20,13 +20,13 @@ RUN mkdir -p /app/src && chown -R 1000:1000 /app
 COPY src/ ./src
 COPY LICENSE .
 COPY main.py .
-COPY pyproject.toml .
+COPY pyproject.toml uv.lock ./
 
 ENV UV_CACHE_DIR=/app/.cache/uv
 
 USER 1000
 
-RUN uv sync --python /usr/bin/python3 --no-cache
+RUN uv sync --frozen --python /usr/bin/python3 --no-cache
 
 USER root
 
