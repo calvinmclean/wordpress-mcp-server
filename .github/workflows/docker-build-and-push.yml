@@ -81,8 +81,8 @@ jobs:
         env:
           IMAGE_TAG: ghcr.io/${{ github.repository }}:${{ github.ref_name }}
         run: |
-          crane push --index "$RUNNER_TEMP/image-layout" "$IMAGE_TAG"
-          echo "digest=$(crane digest "$IMAGE_TAG")" >> "$GITHUB_OUTPUT"
+          image_ref=$(crane push --index "$RUNNER_TEMP/image-layout" "$IMAGE_TAG")
+          echo "image_ref=$image_ref" >> "$GITHUB_OUTPUT"
       - name: Install Cosign
         uses: sigstore/cosign-installer@v3.8.1
         with:
@@ -91,16 +91,12 @@ jobs:
         run: cosign version
       - name: Sign Images
         env:
-          DIGEST: ${{ steps.push.outputs.digest }}
-          TAGS: |
-            ghcr.io/${{ github.repository }}:${{ github.ref_name }}
+          IMAGE_REF: ${{ steps.push.outputs.image_ref }}
         run: |
-          images=""
-          for tag in ${TAGS}; do
-            images+="${tag}@${DIGEST} "
-          done
-          cosign sign --yes ${images}
+          cosign sign --yes "$IMAGE_REF"
       - name: Copy image to latest tag
         if: ${{ github.ref_type == 'tag' && !contains(github.ref_name, '-rc') }}
+        env:
+          IMAGE_REF: ${{ steps.push.outputs.image_ref }}
         run: |
-          crane tag ghcr.io/${{ github.repository }}:${{ github.ref_name }} latest
+          crane tag "$IMAGE_REF" latest
