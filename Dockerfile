@@ -45,6 +45,7 @@ RUN chown 1000:1000 /mmmcp.yaml
 
 USER 1000
 
+# mmmcp serves MCP requests at both / and /mcp; existing clients use /mcp.
 ENTRYPOINT ["mmmcp"]
 
 CMD ["--listen", ":8099", "--config", "/mmmcp.yaml"]
