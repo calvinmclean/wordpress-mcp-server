@@ -1,42 +1,46 @@
-FROM ghcr.io/obot-platform/nanobot:v0.0.91@sha256:2cdc20cff957ecfe4a0409209a78a2f1968849cf4f61ee59c60862d55b33e4ff
-
-WORKDIR /app
+FROM ghcr.io/astral-sh/uv:0.12.5@sha256:e85be844203885286c60ffad8a858d48afb6c5a5c237ca0e67f12e74b8f174b1 AS uv-bin
+FROM ghcr.io/obot-platform/mmmcp:v0.1.3@sha256:b014e3678fd9f24130119bcfb774f44e913a729ca6d42d21463cad690f17910c
 
 USER root
+
+# Release images pin APK packages; relax those pins before applying security updates.
+RUN sed -i -E 's/^([^=<>~]+)=.*$/\1/' /etc/apk/world && \
+    apk upgrade --no-cache && \
+    apk add --no-cache python3
+
+COPY --from=uv-bin /uv /uvx /usr/local/bin/
+
+WORKDIR /app
 
 RUN mkdir -p /app/src && chown -R 1000:1000 /app
 
 COPY src/ ./src
-COPY .python-version .
 COPY LICENSE .
 COPY main.py .
 COPY pyproject.toml .
 
+ENV UV_CACHE_DIR=/app/.cache/uv
+
 USER 1000
 
-RUN uv sync
+RUN uv sync --python /usr/bin/python3 --no-cache
 
 USER root
 
-RUN cat > /nanobot.yaml <<'EOF'
-publish:
-  mcpServers: [server]
-
-mcpServers:
-  server:
-    command: uv
-    args: [run, python, /app/main.py]
+RUN cat > /mmmcp.yaml <<'CONFIG'
+servers:
+  - name: WordPress
+    command: /app/.venv/bin/python
+    args: [/app/main.py]
     env:
-      UV_PROJECT: /app
       WORDPRESS_SITE: ${WORDPRESS_SITE}
       WORDPRESS_USERNAME: ${WORDPRESS_USERNAME}
       WORDPRESS_PASSWORD: ${WORDPRESS_PASSWORD}
-EOF
-
-RUN chown 1000:1000 /nanobot.yaml
-
-ENTRYPOINT ["nanobot"]
-
-CMD ["run", "--exclude-built-in-agents", "--disable-ui", "--listen-address", ":8099", "-e", "WORDPRESS_SITE", "-e", "WORDPRESS_USERNAME", "-e", "WORDPRESS_PASSWORD", "--config", "/nanobot.yaml"]
+CONFIG
+RUN chown 1000:1000 /mmmcp.yaml
 
 USER 1000
+
+ENTRYPOINT ["mmmcp"]
+
+CMD ["--listen", ":8099", "--config", "/mmmcp.yaml"]
